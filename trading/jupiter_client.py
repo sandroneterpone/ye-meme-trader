@@ -6,7 +6,6 @@ import logging
 from typing import Optional, Dict, Any
 from solders.keypair import Keypair
 from solders.transaction import VersionedTransaction
-from solders.signer import Signer, Presigner
 from solana.rpc.async_api import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -103,8 +102,8 @@ class JupiterClient:
                     # Deserialize transaction
                     tx = VersionedTransaction.from_bytes(tx_bytes)
                     
-                    # Sign the transaction
-                    tx.sign([self.wallet])
+                    # Sign the transaction without checking
+                    tx.sign_unchecked([self.wallet])
                     
                     # Send the signed transaction
                     result = await self.client.send_raw_transaction(
