@@ -102,8 +102,8 @@ class JupiterClient:
                     # Deserialize transaction
                     tx = VersionedTransaction.from_bytes(tx_bytes)
                     
-                    # Sign the transaction without checking
-                    tx.sign_unchecked([self.wallet])
+                    # Sign the transaction using partial_sign
+                    tx.message.partial_sign([self.wallet], tx.signatures)
                     
                     # Send the signed transaction
                     result = await self.client.send_raw_transaction(
