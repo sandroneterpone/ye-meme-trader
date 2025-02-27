@@ -5,9 +5,9 @@ import aiohttp
 import logging
 from typing import Optional, Dict, Any
 from solders.keypair import Keypair
-from solders.transaction import VersionedTransaction
+from solders.transaction import Transaction, VersionedTransaction
+from solders.instruction import Instruction, AccountMeta
 from solana.rpc.async_api import AsyncClient
-from solana.transaction import Transaction, TransactionInstruction
 
 logger = logging.getLogger(__name__)
 
@@ -122,15 +122,26 @@ class RaydiumClient:
                     
                     # Add instructions
                     for ix_data in swap_response["instructions"]:
-                        ix = TransactionInstruction(
-                            keys=ix_data["keys"],
+                        # Convert account metas
+                        accounts = []
+                        for key in ix_data["keys"]:
+                            meta = AccountMeta(
+                                pubkey=key["pubkey"],
+                                is_signer=key.get("isSigner", False),
+                                is_writable=key.get("isWritable", False)
+                            )
+                            accounts.append(meta)
+                            
+                        # Create instruction
+                        ix = Instruction(
+                            accounts=accounts,
                             program_id=ix_data["programId"],
                             data=base64.b64decode(ix_data["data"])
                         )
                         transaction.add(ix)
                     
-                    # Sign and send transaction
-                    transaction.sign(self.wallet)
+                    # Sign transaction
+                    transaction.sign([self.wallet])
                     
                     # Send the signed transaction
                     result = await self.client.send_transaction(
