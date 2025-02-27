@@ -3,10 +3,9 @@ import json
 import base64
 import aiohttp
 import logging
-from typing import Optional, Dict, List, Any
-from datetime import datetime
+from typing import Optional, Dict, Any
 from solders.keypair import Keypair
-from solders.transaction import Transaction, VersionedTransaction
+from solders.transaction import VersionedTransaction
 from solana.rpc.async_api import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ class JupiterClient:
         """Ottiene una quotazione per uno swap"""
         try:
             # Convert amount to integer (lamports)
-            amount_lamports = int(amount * 1e9)  # Assuming USDC with 9 decimals
+            amount_lamports = int(amount * 1e6)  # Assuming USDC with 6 decimals
             
             params = {
                 "inputMint": input_mint,
@@ -103,10 +102,8 @@ class JupiterClient:
                     # Deserialize transaction
                     tx = VersionedTransaction.from_bytes(tx_bytes)
                     
-                    # Add our signature
-                    message = bytes(tx)
-                    signature = self.wallet.sign_message(message)
-                    tx.signatures.append(signature)
+                    # Sign the transaction using the sign method
+                    tx.sign([self.wallet])
                     
                     # Send the signed transaction
                     result = await self.client.send_raw_transaction(
