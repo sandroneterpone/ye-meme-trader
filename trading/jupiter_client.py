@@ -100,9 +100,13 @@ class JupiterClient:
                     # Decode base64 transaction to bytes
                     tx_bytes = base64.b64decode(swap_response["swapTransaction"])
                     
-                    # Deserialize and sign transaction
+                    # Deserialize transaction
                     tx = VersionedTransaction.from_bytes(tx_bytes)
-                    tx.partial_sign([self.wallet])
+                    
+                    # Add our signature
+                    message = bytes(tx)
+                    signature = self.wallet.sign_message(message)
+                    tx.signatures.append(signature)
                     
                     # Send the signed transaction
                     result = await self.client.send_raw_transaction(
