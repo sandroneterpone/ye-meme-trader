@@ -1,3 +1,7 @@
+# Environment variables
+.env
+!.env.example
+
 # Python
 __pycache__/
 *.py[cod]
@@ -30,10 +34,6 @@ ENV/
 .vscode/
 *.swp
 *.swo
-
-# Environment variables
-.env
-.env.*
 
 # Logs
 *.log
