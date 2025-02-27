@@ -3,7 +3,7 @@ import asyncio
 from dotenv import load_dotenv
 from solders.keypair import Keypair
 from solana.rpc.async_api import AsyncClient
-from trading.auto_trader import AutoTrader
+from trading.jupiter_client import JupiterClient
 import base58
 
 async def main():
@@ -22,42 +22,30 @@ async def main():
         # Initialize wallet
         wallet = Keypair.from_bytes(base58.b58decode(private_key_base58))
         
-        # Initialize trader
-        trader = AutoTrader(wallet, client, test_mode=False)
+        # Initialize Jupiter client
+        jupiter = JupiterClient(wallet, client, test_mode=False)
         
         # USDC -> BONK
-        BONK_MINT = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"  # BONK token
-        USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"  # USDC token
-        amount_usdc = 0.1
-        
-        print(f"\nGetting quote for {amount_usdc} USDC to BONK...")
-        quote = await trader.jupiter_client.get_quote(
-            input_mint=USDC_MINT,
-            output_mint=BONK_MINT,
-            amount=amount_usdc
+        print(f"\nGetting quote for 0.1 USDC to BONK...")
+        quote = await jupiter.get_quote(
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC mint
+            "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",  # BONK mint
+            0.1  # Amount in USDC
         )
         
         if quote:
-            output_amount = float(quote['outAmount']) / 1e9  # BONK has 9 decimals
+            out_amount = float(quote['outAmount'])
             price_impact = float(quote.get('priceImpactPct', 0))
-            
-            print(f"You will receive: {output_amount:.2f} BONK")
+            print(f"You will receive: {out_amount / 1e9:.2f} BONK")
             print(f"Price Impact: {price_impact:.2f}%")
             
-            if price_impact > 1.0:
-                print("⚠️  WARNING: Price impact is high!")
-                proceed = input("Do you want to proceed? (y/n): ")
-                if proceed.lower() != 'y':
-                    print("Swap cancelled")
-                    return
+            print("\nExecuting swap...")
+            signature = await jupiter.swap(quote)
             
-            print(f"\nExecuting swap...")
-            tx_hash = await trader.jupiter_client.swap(quote)
-            
-            if tx_hash:
+            if signature:
                 print(f"\n✅ Swap completed!")
-                print(f"Transaction hash: {tx_hash}")
-                print(f"View on Solscan: https://solscan.io/tx/{tx_hash}")
+                print(f"Transaction hash: {signature}")
+                print(f"View on Solscan: https://solscan.io/tx/{signature}")
             else:
                 print("\n❌ Swap failed")
         else:
