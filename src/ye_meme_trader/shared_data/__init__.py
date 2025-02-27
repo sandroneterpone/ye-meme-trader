@@ -1,0 +1,3 @@
+"""
+Shared data management module.
+"""

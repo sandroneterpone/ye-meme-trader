@@ -1,0 +1,27 @@
+# Core dependencies
+solana-py>=0.30.0
+solders>=0.18.0
+anchorpy==0.18.0
+base58>=2.1.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# Jupiter SDK
+jupiter-python-sdk==0.0.1.0
+
+# Utility
+aiohttp>=3.8.0
+asyncio==3.4.3
+
+# Testing
+pytest==7.3.1
+pytest-asyncio==0.21.0
+
+# Additional dependencies
+python-telegram-bot==20.2
+requests>=2.31.0
+web3>=6.11.0
+numpy>=1.24.0
+redis>=4.0.0
+pandas>=2.0.0
+sentry-sdk>=1.0.0

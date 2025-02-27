@@ -1,0 +1,18 @@
+{
+    "memecoin_trovate": [],
+    "saldo_wallet": {
+        "sol": 0.0,
+        "usd": 0.0,
+        "last_update": ""
+    },
+    "trade": {
+        "active_trades": [],
+        "pending_trades": []
+    },
+    "prof_e_perd": {
+        "total_profit_sol": 0.0,
+        "total_profit_usd": 0.0,
+        "trades_history": []
+    },
+    "last_update": ""
+}
