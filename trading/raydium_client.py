@@ -7,8 +7,7 @@ from typing import Optional, Dict, Any
 from solders.keypair import Keypair
 from solders.transaction import VersionedTransaction
 from solana.rpc.async_api import AsyncClient
-from solana.transaction import Transaction
-from solana.system_program import TransactionInstruction
+from solana.transaction import Transaction, TransactionInstruction
 
 logger = logging.getLogger(__name__)
 
