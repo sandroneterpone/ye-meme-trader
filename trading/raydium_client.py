@@ -16,7 +16,7 @@ class RaydiumClient:
         self.wallet = keypair
         self.client = client
         self.test_mode = test_mode
-        self.api_url = "https://api.raydium.io/v2"
+        self.api_url = "https://quote-api.jup.ag/v6"
         logger.info(f"RaydiumClient initialized in {'TEST' if test_mode else 'LIVE'} mode")
 
     async def get_token_price(self, token_mint: str) -> Optional[float]:
@@ -24,12 +24,16 @@ class RaydiumClient:
         try:
             connector = aiohttp.TCPConnector(ssl=False)
             async with aiohttp.ClientSession(connector=connector) as session:
-                url = f"{self.api_url}/main/price?fsym={token_mint}&tsyms=USD"
-                async with session.get(url) as response:
+                url = f"{self.api_url}/compute/price"
+                params = {"mints": [token_mint]}
+                async with session.get(url, params=params) as response:
+                    response_text = await response.text()
+                    logger.info(f"Raw response: {response_text}")
+                    
                     if response.status == 200:
                         data = await response.json()
-                        if data and "USD" in data:
-                            return float(data["USD"])
+                        if data and "data" in data and token_mint in data["data"]:
+                            return float(data["data"][token_mint]["price"])
         except Exception as e:
             logger.error(f"Error getting token price: {e}")
         return None
@@ -39,47 +43,47 @@ class RaydiumClient:
         try:
             connector = aiohttp.TCPConnector(ssl=False)
             async with aiohttp.ClientSession(connector=connector) as session:
-                url = f"{self.api_url}/main/pairs"
-                async with session.get(url) as response:
+                url = f"{self.api_url}/compute/pool-info"
+                params = {"inputMint": input_mint, "outputMint": output_mint}
+                async with session.get(url, params=params) as response:
+                    response_text = await response.text()
+                    logger.info(f"Raw response: {response_text}")
+                    
                     if response.status == 200:
-                        pools = await response.json()
-                        for pool in pools:
-                            if (pool["token0"]["address"] == input_mint and pool["token1"]["address"] == output_mint) or \
-                               (pool["token0"]["address"] == output_mint and pool["token1"]["address"] == input_mint):
-                                return pool
+                        data = await response.json()
+                        if data and "data" in data:
+                            return data["data"]
         except Exception as e:
             logger.error(f"Error getting pool info: {e}")
         return None
 
     async def get_quote(self, input_mint: str, output_mint: str, amount: float, slippage: float = 0.5) -> Optional[Dict]:
-        """Ottiene una quotazione per uno swap su Raydium"""
+        """Ottiene una quotazione per uno swap su Jupiter"""
         try:
-            # Get pool info first
-            pool = await self.get_pool_info(input_mint, output_mint)
-            if not pool:
-                logger.error("Pool not found")
-                return None
-
             # Convert amount to integer (lamports)
             amount_lamports = int(amount * 1e6)  # Assuming USDC with 6 decimals
             
+            url = f"{self.api_url}/quote"
             params = {
                 "inputMint": input_mint,
                 "outputMint": output_mint,
                 "amount": str(amount_lamports),
-                "slippage": slippage,
-                "poolId": pool["id"]
+                "slippageBps": str(int(slippage * 100)),
+                "onlyDirectRoutes": "true",
+                "asLegacyTransaction": "true"
             }
             
             logger.info(f"Getting quote with params: {params}")
             
             connector = aiohttp.TCPConnector(ssl=False)
             async with aiohttp.ClientSession(connector=connector) as session:
-                url = f"{self.api_url}/main/quote"
                 async with session.get(url, params=params) as response:
+                    response_text = await response.text()
+                    logger.info(f"Raw response: {response_text}")
+                    
                     if response.status == 200:
                         quote = await response.json()
-                        logger.info(f"Got quote: {quote}")
+                        logger.info(f"Got quote response: {json.dumps(quote, indent=2)}")
                         return quote
                     else:
                         error_text = await response.text()
@@ -89,26 +93,38 @@ class RaydiumClient:
             logger.error(f"Error getting quote: {e}")
         return None
 
+    async def get_sol_balance(self) -> float:
+        """Get SOL balance for the wallet"""
+        try:
+            balance = await self.client.get_balance(self.wallet.pubkey())
+            return balance / 1e9  # Convert lamports to SOL
+        except Exception as e:
+            logger.error(f"Error getting SOL balance: {e}")
+            return 0.0
+
     async def swap(self, quote: Dict[str, Any]) -> Optional[str]:
-        """Esegue uno swap su Raydium"""
+        """Esegue uno swap su Jupiter"""
         if self.test_mode:
             logger.info("Test mode: skipping actual swap")
             return "test_transaction_signature"
 
         try:
-            # Prepare the transaction
+            url = f"{self.api_url}/swap"
+            swap_data = {
+                "quoteResponse": quote,
+                "userPublicKey": str(self.wallet.pubkey()),
+                "wrapUnwrapSOL": False,
+                "asLegacyTransaction": True
+            }
+            
+            logger.info(f"Preparing swap with data: {swap_data}")
+            
             connector = aiohttp.TCPConnector(ssl=False)
             async with aiohttp.ClientSession(connector=connector) as session:
-                # Get swap instructions
-                url = f"{self.api_url}/main/swap"
-                swap_data = {
-                    "quote": quote,
-                    "userPublicKey": str(self.wallet.pubkey())
-                }
-                
-                logger.info(f"Preparing swap with data: {swap_data}")
-                
                 async with session.post(url, json=swap_data) as response:
+                    response_text = await response.text()
+                    logger.info(f"Raw response: {response_text}")
+                    
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"Failed to prepare swap transaction. Status: {response.status}, Response: {error_text}")
@@ -117,35 +133,21 @@ class RaydiumClient:
                     swap_response = await response.json()
                     logger.info(f"Got swap response: {swap_response}")
                     
-                    # Create transaction
-                    transaction = Transaction()
+                    if "error" in swap_response:
+                        logger.error(f"Swap response error: {swap_response['error']}")
+                        return None
                     
-                    # Add instructions
-                    for ix_data in swap_response["instructions"]:
-                        # Convert account metas
-                        accounts = []
-                        for key in ix_data["keys"]:
-                            meta = AccountMeta(
-                                pubkey=key["pubkey"],
-                                is_signer=key.get("isSigner", False),
-                                is_writable=key.get("isWritable", False)
-                            )
-                            accounts.append(meta)
-                            
-                        # Create instruction
-                        ix = Instruction(
-                            accounts=accounts,
-                            program_id=ix_data["programId"],
-                            data=base64.b64decode(ix_data["data"])
-                        )
-                        transaction.add(ix)
+                    # Get transaction data
+                    tx_data = swap_response["swapTransaction"]
+                    tx_buffer = base64.b64decode(tx_data)
                     
-                    # Sign transaction
-                    transaction.sign([self.wallet])
+                    # Deserialize and sign transaction
+                    tx = Transaction.from_bytes(tx_buffer)
+                    tx.sign([self.wallet])
                     
                     # Send the signed transaction
-                    result = await self.client.send_transaction(
-                        transaction
+                    result = await self.client.send_raw_transaction(
+                        bytes(tx)
                     )
                     
                     if result["result"]:
